@@ -1,0 +1,226 @@
+[13:40, 28/8/2023] Daniel: import org.example.DAO.DaoContoCorrente;
+import org.example.DAO.IDao;
+import org.example.DTO.ContoCorrente;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.function.Executable;
+
+public class ContoCorrenteTest extends DaoAbstractTest<ContoCorrente> {
+    @Override
+    IDao<ContoCorrente> getDao() {
+        return new DaoContoCorrente();
+    }
+
+    @Override
+    Executable getAssertionsTestReadCognome(ContoCorrente item) {
+        return () -> {
+            String expectedCognome = "Guidolin";
+            String actualCognome = item.getCognomeTitolare();
+            Assertions.assertEquals(expectedCognome, actualCognome, "Cognome non corrisponde");
+        };
+    }
+
+    @Override
+    ContoCorrente getItemTestInsert() {
+        return new ContoCorrente(222222222222L, "2", "22222", "22222", "Pasquale", "Pasqualino", "GDLDNL94C28L219Z");
+    }
+
+    @Override
+    Executable getAssertionsTestInsert() {
+        return () -> Assertions.assertTrue(getDao().findByCognome("Pasqualino").equals("Pasqualino"));
+    }
+
+    @Override
+    Executable getAssertionsTestReadCodiceFiscale(ContoCorrente item) {
+        return () -> {
+            String expectedCodiceFiscale = "GDLDNL94C28L219P";
+            String actualCodiceFiscale = item.getCodiceFiscaleTitolare();
+            Assertions.assertEquals(expectedCodiceFiscale, actualCodiceFiscale, "Codice Fiscale non corrisponde");
+        };
+    }
+}
+[13:40, 28/8/2023] Daniel: package org.example;
+
+import org.example.DAO.DaoException;
+import org.example.DAO.IDao;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Properties;
+
+public abstract class DaoAbstractTest<T>{
+
+    //--------------------------------------------------
+
+    private static final String URL = "URL";
+    private static final String USER = "USERNAME";
+    private static final String PASSWORD = "PASSWORD";
+    private static String url;
+    private static String user;
+    private static String password;
+
+    //--------------------------------------------------
+
+    @BeforeAll
+    public static void initTest(){
+        DaoAbstractTest.getConnection("./config.properties");
+        DaoAbstractTest.initDB("./testfinalefinale_db.sql");
+    }
+
+    public static void getConnection(String configProperties){
+        Properties p = new Properties();
+        try(InputStream is = DaoAbstractTest.class.getClassLoader().getResourceAsStream(configProperties)){
+            p.load(is);
+            url = p.getProperty(URL);
+            user = p.getProperty(USER);
+            password = p.getProperty(PASSWORD);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void initDB(String scriptSql){
+        try(Connection c = DriverManager.getConnection(url, user, password)){
+            Statement stm = c.createStatement();
+            InputStream is = DaoAbstractTest.class.getClassLoader().getResourceAsStream(scriptSql);
+            String initInstructions = "";
+            BufferedReader br = new BufferedReader(new InputStreamReader(is));
+            String line;
+            while ((line = br.readLine()) != null){
+                initInstructions += line;
+            }
+            String[] arrayInstr = initInstructions.split(";");
+            for(int i = 0; i < arrayInstr.length; i++){
+                stm.executeUpdate(arrayInstr[i]);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    //--------------------------------------------------
+
+    abstract IDao<T> getDao();
+
+    //--------------------------------------------------
+
+    @Test
+    public void testReadCognome() throws DaoException {
+        IDao<T> dao = getDao();
+        List<T> lista = dao.findByCognome("Guidolin");
+        T item = lista.get(0);
+        Assertions.assertAll(
+                getAssertionsTestReadCognome(item)
+        );
+    }
+
+    abstract Executable getAssertionsTestReadCognome(T item);
+
+
+    @Test
+    public void testInsert() throws DaoException {
+        IDao<T> dao = getDao();
+        T item = getItemTestInsert();
+        Assertions.assertDoesNotThrow(() -> dao.create(item));
+        getAssertionsTestInsert();
+    }
+
+    abstract T getItemTestInsert();
+
+    abstract Executable getAssertionsTestInsert();
+
+    @Test
+    public void testReadCodiceFiscale() throws DaoException {
+        IDao<T> dao = getDao();
+        List<T> lista = dao.findByCodiceFiscale("GDLDNL94C28L219P");
+        T item = lista.get(0);
+        Assertions.assertAll(
+                getAssertionsTestReadCodiceFiscale(item)
+        );
+    }
+
+    abstract Executable getAssertionsTestReadCodiceFiscale(T item);
+
+}
+
+
+package org.example.DAO;
+
+import org.example.DTO.ContoCorrente;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class DaoContoCorrente extends DaoAbstract<ContoCorrente> {
+
+    @Override
+    protected PreparedStatement getPreparedStatementSelect(ContoCorrente contoCorrente, Connection cn) throws SQLException {
+        PreparedStatement ps = cn.prepareStatement("insert into testfinalefinale.conticorrenti(numeroConto, CIN, ABI, CAB, nomeTitolare, cognomeTitolare, codiceFiscaleTitolare) values (?,?,?,?,?,?,?)");
+        ps.setLong(1, contoCorrente.getNumeroConto());
+        ps.setString(2, contoCorrente.getCIN());
+        ps.setString(3, contoCorrente.getABI());
+        ps.setString(4, contoCorrente.getCAB());
+        ps.setString(5, contoCorrente.getNomeTitolare());
+        ps.setString(6, contoCorrente.getCognomeTitolare());
+        ps.setString(7,contoCorrente.getCodiceFiscaleTitolare());
+        return ps;
+    }
+
+    @Override
+    protected List<ContoCorrente> rsCognomeToObject(ResultSet rs) throws SQLException {
+        List<ContoCorrente> result = new ArrayList<>();
+        Long numeroConto = rs.getLong("numeroConto");
+        String CIN = rs.getString("CIN");
+        String ABI = rs.getString("ABI");
+        String CAB = rs.getString("CAB");
+        String nomeTitolare = rs.getString("nomeTitolare");
+        String cognomeTitolare = rs.getString("cognomeTitolare");
+        String codiceFiscaleTitolare = rs.getString("codiceFiscaleTitolare");
+        result.add(new ContoCorrente(numeroConto,CIN, ABI,CAB,nomeTitolare,cognomeTitolare, codiceFiscaleTitolare));
+        return result;
+    }
+
+    @Override
+    protected PreparedStatement getPreparedStatementFindByCognome(Connection cn, String cognome) throws SQLException {
+        PreparedStatement ps = cn.prepareStatement("select * from testfinalefinale.conticorrenti where cognomeTitolare LIKE  ?");
+        ps.setString(1, "%" + cognome + "%");
+        return ps;
+    }
+
+    @Override
+    protected List<ContoCorrente> rsCodiceFiscaleToObject(ResultSet rs) throws SQLException {
+        List<ContoCorrente> result = new ArrayList<>();
+        Long numeroConto = rs.getLong("numeroConto");
+        String CIN = rs.getString("CIN");
+        String ABI = rs.getString("ABI");
+        String CAB = rs.getString("CAB");
+        String nomeTitolare = rs.getString("nomeTitolare");
+        String cognomeTitolare = rs.getString("cognomeTitolare");
+        String codiceFiscaleTitolare = rs.getString("codiceFiscaleTitolare");
+        result.add(new ContoCorrente(numeroConto,CIN, ABI,CAB,nomeTitolare,cognomeTitolare, codiceFiscaleTitolare));
+        return result;
+    }
+
+    @Override
+    protected PreparedStatement getPreparedStatementFindByCodiceFiscale(Connection cn, String codiceFiscale) throws SQLException {
+        PreparedStatement ps = cn.prepareStatement("select * from testfinalefinale.conticorrenti where codiceFiscaleTitolare like ?");
+        ps.setString (1, "%" + codiceFiscale + "%");
+        return ps;
+    }
+}
